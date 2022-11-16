@@ -105,6 +105,63 @@ impl EncodedPoint for G1Uncompressed {
             })
         }
     }
+    fn into_affine_no_changes(&self) -> Result<G1Affine, GroupDecodingError> {
+        let affine = self.into_affine_no_changes_unchecked()?;
+
+        if !affine.is_on_curve() {
+            Err(GroupDecodingError::NotOnCurve)
+        } else if !affine.in_subgroup() {
+            Err(GroupDecodingError::NotInSubgroup)
+        } else {
+            Ok(affine)
+        }
+    }
+    fn into_affine_no_changes_unchecked(&self) -> Result<G1Affine, GroupDecodingError> {
+        // Create a copy of this representation.
+        let mut copy = self.0;
+
+        if copy[0] & (1 << 7) != 0 {
+            // Distinguisher bit is set, but this should be uncompressed!
+            return Err(GroupDecodingError::UnexpectedCompressionMode);
+        }
+
+        if copy[0] & (1 << 6) != 0 {
+            // This is the point at infinity, which means that if we mask away
+            // the first two bits, the entire representation should consist
+            // of zeroes.
+            copy[0] &= 0x3f;
+
+            if copy.iter().all(|b| *b == 0) {
+                Ok(G1Affine::zero())
+            } else {
+                Err(GroupDecodingError::UnexpectedInformation)
+            }
+        } else {
+            if copy[0] & (1 << 5) != 0 {
+                // The bit indicating the y-coordinate should be lexicographically
+                // largest is set, but this is an uncompressed element.
+                return Err(GroupDecodingError::UnexpectedInformation);
+            }
+
+            let mut x = FqRepr([0; 6]);
+            let mut y = FqRepr([0; 6]);
+
+            {
+                let mut reader = &copy[..];
+
+                x.read_be(&mut reader).unwrap();
+                y.read_be(&mut reader).unwrap();
+            }
+
+            Ok(G1Affine {
+                x: Fq::from_repr(x)
+                    .map_err(|e| GroupDecodingError::CoordinateDecodingError("x coordinate", e))?,
+                y: Fq::from_repr(y)
+                    .map_err(|e| GroupDecodingError::CoordinateDecodingError("y coordinate", e))?,
+                infinity: false,
+            })
+        }
+    }
     fn from_affine(affine: G1Affine) -> Self {
         let mut res = Self::empty();
 
