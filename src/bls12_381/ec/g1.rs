@@ -105,7 +105,28 @@ impl EncodedPoint for G1Uncompressed {
             })
         }
     }
-    fn into_affine_no_changes(&self) -> Result<G1Affine, GroupDecodingError> {
+
+    fn from_affine(affine: G1Affine) -> Self {
+        let mut res = Self::empty();
+
+        if affine.is_zero() {
+            // Set the second-most significant bit to indicate this point
+            // is at infinity.
+            res.0[0] |= 1 << 6;
+        } else {
+            let mut writer = &mut res.0[..];
+
+            affine.x.into_repr().write_be(&mut writer).unwrap();
+            affine.y.into_repr().write_be(&mut writer).unwrap();
+        }
+
+        res
+    }
+}
+
+
+impl G1Uncompressed{
+    pub fn into_affine_no_changes(&self) -> Result<G1Affine, GroupDecodingError> {
         let affine = self.into_affine_no_changes_unchecked()?;
 
         if !affine.is_on_curve() {
@@ -116,7 +137,7 @@ impl EncodedPoint for G1Uncompressed {
             Ok(affine)
         }
     }
-    fn into_affine_no_changes_unchecked(&self) -> Result<G1Affine, GroupDecodingError> {
+    pub fn into_affine_no_changes_unchecked(&self) -> Result<G1Affine, GroupDecodingError> {
         // Create a copy of this representation.
         let mut copy = self.0;
 
@@ -162,23 +183,8 @@ impl EncodedPoint for G1Uncompressed {
             })
         }
     }
-    fn from_affine(affine: G1Affine) -> Self {
-        let mut res = Self::empty();
-
-        if affine.is_zero() {
-            // Set the second-most significant bit to indicate this point
-            // is at infinity.
-            res.0[0] |= 1 << 6;
-        } else {
-            let mut writer = &mut res.0[..];
-
-            affine.x.into_repr().write_be(&mut writer).unwrap();
-            affine.y.into_repr().write_be(&mut writer).unwrap();
-        }
-
-        res
-    }
 }
+
 
 #[derive(Copy, Clone)]
 pub struct G1Compressed([u8; 48]);
